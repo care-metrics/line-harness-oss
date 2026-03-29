@@ -8,6 +8,7 @@ import { processReminderDeliveries } from './services/reminder-delivery.js';
 import { checkAccountHealth } from './services/ban-monitor.js';
 import { refreshLineAccessTokens } from './services/token-refresh.js';
 import { authMiddleware } from './middleware/auth.js';
+import { rateLimitMiddleware } from './middleware/rate-limit.js';
 import { webhook } from './routes/webhook.js';
 import { friends } from './routes/friends.js';
 import { tags } from './routes/tags.js';
@@ -60,6 +61,9 @@ const app = new Hono<Env>();
 
 // CORS — allow all origins for MVP
 app.use('*', cors({ origin: '*' }));
+
+// Rate limiting — runs before auth to block abuse early
+app.use('*', rateLimitMiddleware);
 
 // Auth middleware — skips /webhook and /docs automatically
 app.use('*', authMiddleware);
@@ -132,8 +136,17 @@ h1{font-size:28px;font-weight:800;margin-bottom:8px}
 </html>`);
 });
 
-// 404 fallback
-app.notFound((c) => c.json({ success: false, error: 'Not found' }, 404));
+// Convenience redirect for /book path
+app.get('/book', (c) => c.redirect('/?page=book'));
+
+// 404 fallback — JSON for API paths, plain for others (Workers Assets SPA fallback handles it)
+app.notFound((c) => {
+  const path = new URL(c.req.url).pathname;
+  if (path.startsWith('/api/') || path === '/webhook' || path === '/docs' || path === '/openapi.json') {
+    return c.json({ success: false, error: 'Not found' }, 404);
+  }
+  return c.notFound();
+});
 
 // Scheduled handler for cron triggers — runs for all active LINE accounts
 async function scheduled(

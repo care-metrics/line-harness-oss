@@ -13,3 +13,5 @@ dist/
 .env.staging
 apps/web/out/
 apps/worker/dist/
+.line-harness-config.json
+.line-harness-setup.json
